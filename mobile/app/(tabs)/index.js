@@ -7,7 +7,7 @@ import {
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { supabase } from "../../lib/supabase"
+import { getMedications, getRecord, updateRecord } from "../../lib/db"
 import { useAppStore } from "../../store/useAppStore"
 import DateStrip from "../../components/DateStrip"
 import MedicationCard from "../../components/MedicationCard"
@@ -15,32 +15,29 @@ import MedicationCard from "../../components/MedicationCard"
 export default function HomeScreen() {
   const { selectedDate } = useAppStore()
   const queryClient = useQueryClient()
-  const dateStr = selectedDate.toISOString().split("T")[0]
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return "Good Morning"
+    if (hour < 18) return "Good Afternoon"
+    return "Good Evening"
+  }
+  // Fix date string to be local YYYY-MM-DD
+  const dateStr = selectedDate.toLocaleDateString("en-CA")
 
   // 1. Fetch Config
   const { data: configData, isLoading: configLoading } = useQuery({
-    queryKey: ["medications_config"],
+    queryKey: ["medications"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("medications_config")
-        .select("*")
-        .order("created_at")
-      if (error) throw error
-      return data
+      return getMedications()
     },
   })
 
   // 2. Fetch Records for Date
   const { data: recordData, isLoading: recordLoading } = useQuery({
-    queryKey: ["medication_records", dateStr],
+    queryKey: ["record", dateStr],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("medication_records")
-        .select("*")
-        .eq("date", dateStr)
-        .maybeSingle()
-
-      if (error) throw error
+      const data = getRecord(dateStr)
+      console.log("Fetched Record:", dateStr, data)
       return data || { data: {} }
     },
   })
@@ -48,53 +45,36 @@ export default function HomeScreen() {
   // 3. Mutation
   const mutation = useMutation({
     mutationFn: async ({ key, value }) => {
-      // Get current state
-      const currentData = recordData?.data || {}
-      const newData = { ...currentData, [key]: value }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      const { error } = await supabase.from("medication_records").upsert(
-        {
-          user_id: user.id,
-          date: dateStr,
-          data: newData,
-        },
-        { onConflict: "user_id, date" }
-      )
-
-      if (error) throw error
+      console.log("Mutating:", key, value)
+      // Get current state (handled by db update, but for optimistic update we need key/val)
+      const newData = updateRecord(dateStr, key, value)
       return newData
     },
     onMutate: async ({ key, value }) => {
       // Optimistic Update
-      await queryClient.cancelQueries(["medication_records", dateStr])
-      const previous = queryClient.getQueryData(["medication_records", dateStr])
+      await queryClient.cancelQueries(["record", dateStr])
+      const previous = queryClient.getQueryData(["record", dateStr])
 
-      queryClient.setQueryData(["medication_records", dateStr], (old) => ({
+      queryClient.setQueryData(["record", dateStr], (old) => ({
         ...old,
-        data: { ...old.data, [key]: value },
+        data: { ...old?.data, [key]: value },
       }))
       return { previous }
     },
     onError: (err, newTodo, context) => {
-      queryClient.setQueryData(
-        ["medication_records", dateStr],
-        context.previous
-      )
+      queryClient.setQueryData(["record", dateStr], context.previous)
       alert("Failed to update: " + err.message)
     },
     onSettled: () => {
-      queryClient.invalidateQueries(["medication_records", dateStr])
+      queryClient.invalidateQueries(["record", dateStr])
+      queryClient.invalidateQueries(["history"]) // Refresh history too
     },
   })
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.header}>
-        <Text style={styles.greeting}>Good Afternoon, Ralph</Text>
+        <Text style={styles.greeting}>{getGreeting()}</Text>
         <Text style={styles.headerSubtitle}>
           {selectedDate.toLocaleDateString("en-US", {
             weekday: "long",

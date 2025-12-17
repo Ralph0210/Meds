@@ -6,11 +6,12 @@ import {
   FlatList,
   StyleSheet,
 } from "react-native"
-import Svg, { Circle, Path, G } from "react-native-svg"
 import { useQuery } from "@tanstack/react-query"
-import { supabase } from "../lib/supabase"
+import { getRecords } from "../lib/db"
 import { useAppStore } from "../store/useAppStore"
 import { LinearGradient } from "expo-linear-gradient"
+import { Colors, Spacing, Layout, Typography } from "../theme"
+import ProgressRing from "./ProgressRing" // Use new component
 
 const DAYS_TO_SHOW = 14
 
@@ -33,158 +34,38 @@ export default function DateStrip({ config = [] }) {
   start.setDate(today.getDate() - 3)
   const dates = getDates(start, DAYS_TO_SHOW)
 
-  const startStr = dates[0].toISOString().split("T")[0]
-  const endStr = dates[dates.length - 1].toISOString().split("T")[0]
+  // Use local date strings for consistency with HomeScreen
+  const startStr = dates[0].toLocaleDateString("en-CA")
+  const endStr = dates[dates.length - 1].toLocaleDateString("en-CA")
 
   // Fetch Range History
   const { data: history } = useQuery({
     queryKey: ["history", startStr, endStr],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("medication_records")
-        .select("*")
-        .gte("date", startStr)
-        .lte("date", endStr)
-
-      if (error) throw error
-      // Transform to map
-      const map = {}
-      data.forEach((r) => (map[r.date] = r))
-      return map
+      // getRecords expects YYYY-MM-DD
+      return getRecords(startStr, endStr)
     },
-    enabled: !!config, // Only fetch if we have config? or always?
+    enabled: !!config,
   })
 
-  const getProgress = (date) => {
-    if (!config || config.length === 0) return 0
-
-    const dateStr = date.toISOString().split("T")[0]
-    const record = history?.[dateStr]
-    const data = record?.data || {}
-
-    let total = 0
-    let taken = 0
-
-    config.forEach((med) => {
-      med.keys.forEach((key) => {
-        total++
-        if (data[key]) taken++
-      })
-    })
-
-    return total === 0 ? 0 : taken / total
-  }
-
-  // Helper for SVG Arcs
-  function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
-    const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0
-    return {
-      x: centerX + radius * Math.cos(angleInRadians),
-      y: centerY + radius * Math.sin(angleInRadians),
-    }
-  }
-
-  function describeArc(x, y, radius, startAngle, endAngle) {
-    const start = polarToCartesian(x, y, radius, endAngle)
-    const end = polarToCartesian(x, y, radius, startAngle)
-    const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1"
-    const d = [
-      "M",
-      start.x,
-      start.y,
-      "A",
-      radius,
-      radius,
-      0,
-      largeArcFlag,
-      0,
-      end.x,
-      end.y,
-    ].join(" ")
-    return d
-  }
-
-  // ... DateStrip Component ...
   const renderItem = ({ item }) => {
     const isSelected = isSameDay(item, selectedDate)
 
     // 1. Calculate Segments
     const segments = []
     if (config && config.length > 0) {
-      const dateStr = item.toISOString().split("T")[0]
+      const dateStr = item.toLocaleDateString("en-CA")
       const record = history?.[dateStr]?.data || {}
 
       config.forEach((med) => {
         med.keys.forEach((key) => {
           segments.push({
-            taken: !!record[key],
+            completed: !!record[key],
             color: med.color,
-            count: 1,
           })
         })
       })
     }
-
-    // 2. Generate Paths
-    const size = 36
-    const center = size / 2
-    const radius = 14
-    const strokeWidth = 3
-
-    let paths = []
-    const total = segments.length
-
-    if (total > 0) {
-      const gap = 4 // degrees gap
-      const totalGap = gap * total
-      const availableDeg = 360 - totalGap
-      const segmentDeg = availableDeg / total
-
-      segments.forEach((seg, i) => {
-        const startAngle = i * (segmentDeg + gap)
-        const endAngle = startAngle + segmentDeg
-
-        // If only 1 segment (gap doesn't make sense if full circle?),
-        // but we usually have multiple. If 1, we can do 359.9 or handled by loop.
-        // If total is 1, let's just do full circle minus slight gap or full?
-        // Web uses gaps even for 1 item sometimes or usually multiple.
-
-        // Check for valid arcs
-        const d = describeArc(center, center, radius, startAngle, endAngle)
-        const color = seg.taken ? seg.color : "rgba(255,255,255,0.1)" // Track color
-
-        paths.push(
-          <Path
-            key={i}
-            d={d}
-            stroke={color}
-            strokeWidth={strokeWidth}
-            fill="none"
-            strokeLinecap="round"
-          />
-        )
-      })
-    } else {
-      // No meds? Empty track
-      paths.push(
-        <Circle
-          key="empty"
-          cx={center}
-          cy={center}
-          r={radius}
-          stroke="rgba(255,255,255,0.1)"
-          strokeWidth={strokeWidth}
-          fill="none"
-        />
-      )
-    }
-
-    const Background = isSelected ? (
-      <LinearGradient
-        colors={["#27272a", "#3f3f46"]}
-        style={styles.dateItemBg}
-      />
-    ) : null
 
     return (
       <TouchableOpacity
@@ -192,14 +73,14 @@ export default function DateStrip({ config = [] }) {
         style={styles.dateItemWrapper}
       >
         <View style={[styles.dateItem, isSelected && styles.dateItemSelected]}>
-          <Text style={[styles.dayText, isSelected && { color: "#d0bcff" }]}>
+          <Text
+            style={[styles.dayText, isSelected && { color: Colors.primary }]}
+          >
             {item.toLocaleDateString("en-US", { weekday: "narrow" })}
           </Text>
 
           <View style={styles.ringContainer}>
-            <Svg height={size} width={size}>
-              {paths}
-            </Svg>
+            <ProgressRing segments={segments} size={36} />
             <Text
               style={[styles.dateText, isSelected && styles.dateTextSelected]}
             >
@@ -236,34 +117,32 @@ function isSameDay(d1, d2) {
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 16,
+    paddingVertical: Spacing.lg,
   },
   listContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
   },
   dateItemWrapper: {
-    marginHorizontal: 6,
-    borderRadius: 999,
+    marginHorizontal: Spacing.xs,
+    borderRadius: Layout.radius.full,
     overflow: "hidden",
-  },
-  dateItemBg: {
-    ...StyleSheet.absoluteFillObject,
   },
   dateItem: {
     alignItems: "center",
     justifyContent: "center",
     width: 48,
-    height: 64,
-    borderRadius: 999,
+    height: 70, // Increased slightly to breathe
+    borderRadius: Layout.radius.full,
+    gap: Spacing.xs, // Use gap for consistent spacing between Text and Ring
   },
   dateItemSelected: {
-    // Intentionally empty if using LinearGradient
+    // Intentionally empty if using LinearGradient or just styles
   },
   dayText: {
-    color: "#71717a",
-    fontSize: 12,
-    marginBottom: 4,
+    color: Colors.textTertiary,
+    fontSize: Typography.small.fontSize,
     fontWeight: "600",
+    // Removed marginBottom in favor of gap
   },
   ringContainer: {
     position: "relative",
@@ -272,11 +151,11 @@ const styles = StyleSheet.create({
   },
   dateText: {
     position: "absolute",
-    fontSize: 14,
+    fontSize: Typography.caption.fontSize,
     fontWeight: "bold",
-    color: "#a1a1aa",
+    color: Colors.textSecondary,
   },
   dateTextSelected: {
-    color: "#ffffff",
+    color: Colors.textPrimary,
   },
 })
