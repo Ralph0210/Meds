@@ -221,49 +221,134 @@ export default function MedicationCard({
     )
   }
 
+  /* Course Renderer with Progress */
   const CourseRenderer = () => {
+    // 1. Calculate Time-Based Baseline
+    // We must manually parse YYYY-MM-DD to ensure it's treated as LOCAL midnight,
+    // not UTC converted to local (which shifts back a day in western TZs).
+
+    // Default to today if missing
+    let start = new Date()
+    start.setHours(0, 0, 0, 0)
+
+    if (config.startDate) {
+      const [y, m, d] = config.startDate.split("-").map(Number)
+      // Note: Months are 0-indexed in Date constructor
+      start = new Date(y, m - 1, d)
+      start.setHours(0, 0, 0, 0) // Redundant but safe
+    }
+
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+
+    const diffTime = now - start
+    const daysPassed = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    const currentDay = daysPassed + 1
+
+    // 2. Determine Progress & Badge Text
+    let valCurrent, valTotal, labelText, progress
+
+    if (config.durationMode === "quantity") {
+      const unit = config.dosageUnit || "pills"
+      valTotal = parseInt(config.courseDuration) || 1
+
+      // Estimate taken: (Past Days * Doses/Day) + (Today's Actual Checks)
+      const dosesPerDay = config.keys?.length || 1 // keys is array of schedule UUIDs
+      const takenToday =
+        config.keys?.reduce((acc, k) => acc + (isCompleted(k) ? 1 : 0), 0) || 0
+
+      // If daysPassed < 0 (startDate in future), valCurrent = 0
+      const pastDoses = Math.max(daysPassed, 0) * dosesPerDay
+      valCurrent = pastDoses + takenToday
+
+      // Clamp visuals
+      progress = Math.min(valCurrent / valTotal, 1)
+
+      // "Pill 0 of 20" or "Pill 5 of 20"
+      // Capitalize Unit
+      const Unit = unit.charAt(0).toUpperCase() + unit.slice(1)
+      labelText = `${Unit} ${valCurrent} of ${valTotal}`
+    } else {
+      // Days Mode
+      valTotal = parseInt(config.courseDuration) || 1
+      valCurrent = currentDay
+
+      // Progress for days: use daysPassed (completed days)
+      progress = Math.min(Math.max(daysPassed / valTotal, 0), 1)
+
+      labelText = `Day ${valCurrent} of ${valTotal}`
+    }
+
     return (
       <View>
-        <View style={[styles.rendererContainer, { marginBottom: 8 }]}>
-          <Text style={styles.cardTitle}>{config.name}</Text>
-          <Text style={styles.cardDesc}>Target: {config.total || 20}</Text>
-        </View>
-        {/* Progress Bar Stub - Make it look better */}
-        <View style={styles.progressBarBg}>
+        {/* Header Section with Progress */}
+        <View style={{ marginBottom: Spacing.md }}>
           <View
-            style={[
-              styles.progressBarFill,
-              { width: "33%", backgroundColor: config.color },
-            ]}
-          />
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: Spacing.xs,
+            }}
+          >
+            <View>
+              <Text style={styles.cardTitle}>{config.name}</Text>
+              <Text style={styles.cardDesc}>
+                {config.dosage ||
+                  `${config.dosageQuantity || ""} ${config.dosageUnit || ""}`}
+              </Text>
+            </View>
+            <View style={styles.courseBadge}>
+              <Text style={styles.courseBadgeText}>{labelText}</Text>
+            </View>
+          </View>
+
+          {/* Progress Bar */}
+          <View style={styles.progressBarBg}>
+            <View
+              style={[
+                styles.progressBarFill,
+                { width: `${progress * 100}%`, backgroundColor: config.color },
+              ]}
+            />
+          </View>
         </View>
 
-        <View style={{ gap: 8 }}>
-          {config.schedule?.map((label, index) => {
-            const key = config.keys?.[index]
-            const checked = isCompleted(key)
+        {/* Schedule List (Same as Daily) */}
+        <View style={{ gap: Spacing.md }}>
+          {(!config.keys || config.keys.length === 0) && (
+            <Text style={{ color: Colors.textSecondary }}>No schedule set</Text>
+          )}
+
+          {config.keys?.map((k, i) => {
+            const label =
+              config.times?.[i] || config.schedule?.[i] || `Dose ${i + 1}`
+            const checked = isCompleted(k)
+            const isLast = i === config.keys?.length - 1
+
             return (
-              <TouchableOpacity
-                key={key}
-                onPress={() => onToggle(key, !checked)}
-                style={[
-                  styles.courseButton,
-                  checked
-                    ? styles.courseButtonChecked
-                    : styles.courseButtonUnchecked,
-                ]}
-              >
-                {checked && <Check size={18} color="black" />}
-                <Text
-                  style={
-                    checked
-                      ? styles.courseTextChecked
-                      : styles.courseTextUnchecked
-                  }
+              <View key={k}>
+                <View
+                  style={[styles.dailyRow, { paddingVertical: Spacing.xs }]}
                 >
-                  {checked ? "Taken" : `Take ${label} Dose`}
-                </Text>
-              </TouchableOpacity>
+                  <Text style={styles.timeLabel}>{label}</Text>
+                  <Pressable
+                    onPress={() => onToggle(k, !checked)}
+                    style={[
+                      styles.checkbox,
+                      checked
+                        ? {
+                            backgroundColor: config.color,
+                            borderColor: config.color,
+                          }
+                        : styles.checkboxUnchecked,
+                    ]}
+                  >
+                    {checked && <Check size={20} color="white" />}
+                  </Pressable>
+                </View>
+                {!isLast && <View style={styles.divider} />}
+              </View>
             )
           })}
         </View>
@@ -457,6 +542,17 @@ const styles = StyleSheet.create({
   dailyChipLabel: {
     color: Colors.textSecondary,
     fontSize: Typography.caption.fontSize,
+    fontWeight: "600",
+  },
+  courseBadge: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  courseBadgeText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
     fontWeight: "600",
   },
 })

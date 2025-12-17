@@ -110,3 +110,58 @@ export const DailyCustom = {
     },
   },
 }
+
+// --- Course Stories ---
+
+const courseMed = {
+  id: 10,
+  name: "Antibiotics",
+  dosage: "500mg",
+  frequency: "3x Daily",
+  times: ["Morning", "Noon", "Night"],
+  keys: ["med_10_0", "med_10_1", "med_10_2"],
+  color: "#e84393", // Pink
+  icon: "Pill",
+  type: "course",
+  courseDuration: 10, // Days
+  startDate: new Date(
+    new Date().setDate(new Date().getDate() - 2)
+  ).toISOString(), // Started 2 days ago
+  totalDoses: 30, // 3 * 10
+}
+
+export const Course_Day3 = {
+  args: {
+    config: courseMed,
+    record: {
+      data: {
+        med_10_0: true,
+        med_10_1: false,
+      },
+    },
+  },
+}
+
+export const Course_Day1 = {
+  args: {
+    config: {
+      ...courseMed,
+      startDate: new Date().toLocaleDateString("en-CA"), // "YYYY-MM-DD" local
+    },
+    record: { data: {} },
+  },
+}
+
+export const Course_New_Quantity = {
+  args: {
+    config: {
+      ...courseMed,
+      // Ensure we test the Quantity Logic
+      durationMode: "quantity",
+      courseDuration: 20,
+      dosageUnit: "pills",
+      startDate: new Date().toLocaleDateString("en-CA"), // Today
+    },
+    record: { data: {} },
+  },
+}

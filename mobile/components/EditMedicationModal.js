@@ -29,10 +29,9 @@ const SUPPORTED_COLORS = [
 ]
 
 const MEDICATION_TYPES = [
-  { id: "daily", label: "Daily", desc: "Take everyday" },
-  { id: "course", label: "Course", desc: "Limited duration" },
-  { id: "cyclic", label: "Cyclic", desc: "On/Off cycles" },
-  { id: "interval", label: "Interval", desc: "Every X days" },
+  { id: "daily", label: "Every day", desc: "Take everyday" },
+  { id: "course", label: "For a set period", desc: "Limited duration" },
+  { id: "cyclic", label: "On and off", desc: "On/Off cycles" },
 ]
 
 export default function EditMedicationModal({
@@ -119,7 +118,7 @@ export default function EditMedicationModal({
 
   // --- Renderers for Type-Specific Forms ---
 
-  const renderDailyForm = () => {
+  const renderScheduleForm = () => {
     const handleFrequencyChange = (freq) => {
       let newTimes = []
       if (freq === "1x Daily") newTimes = ["Morning"]
@@ -130,9 +129,72 @@ export default function EditMedicationModal({
       setForm((prev) => ({ ...prev, frequency: freq, times: newTimes }))
     }
 
+    const { type } = form
+    // Determine units for the limit dropdown: "days" vs. the dosage unit (e.g. "pill", "mg")
+    const limitUnitOptions = [form.dosageUnit || "pill", "days"]
+
+    // Helper to get current limit mode from config, or default to quantity (dosageUnit)
+    const currentLimitMode =
+      form.config.durationMode === "days" ? "days" : "quantity"
+
+    // Helper to switch mode
+    const setLimitMode = (mode) => {
+      // mode is either "days" or "quantity"
+      // We map the dropdown selection back to these internal keys
+      updateConfig("durationMode", mode)
+    }
+
     return (
       <View style={styles.subForm}>
-        <Text style={styles.sectionHeader}>Daily Schedule</Text>
+        {/* Course Limit Row - Only for Course */}
+        {type === "course" && (
+          <View style={{ marginBottom: Spacing.xl }}>
+            <Text style={styles.label}>Duration</Text>
+            <View style={{ flexDirection: "row", gap: Spacing.sm, zIndex: 20 }}>
+              <View style={{ flex: 1 }}>
+                <TextInput
+                  style={styles.input}
+                  placeholder={
+                    currentLimitMode === "days" ? "e.g. 10" : "e.g. 30"
+                  }
+                  keyboardType="numeric"
+                  placeholderTextColor={Colors.textTertiary}
+                  value={form.config.courseDuration}
+                  onChangeText={(t) => updateConfig("courseDuration", t)}
+                />
+              </View>
+              <Dropdown
+                value={
+                  currentLimitMode === "days"
+                    ? "days"
+                    : form.dosageUnit || "pill"
+                }
+                options={limitUnitOptions}
+                onChange={(val) => {
+                  if (val === "days") setLimitMode("days")
+                  else setLimitMode("quantity")
+                }}
+                width={110}
+              />
+            </View>
+
+            {/* Start Date also needs to be here if it's a course */}
+            <View style={{ marginTop: Spacing.md }}>
+              <Text style={styles.label}>Start Date</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={Colors.textTertiary}
+                value={
+                  form.config.startDate ||
+                  new Date().toISOString().split("T")[0]
+                }
+                onChangeText={(t) => updateConfig("startDate", t)}
+              />
+            </View>
+          </View>
+        )}
+
         {/* Quick Presets */}
         <View style={styles.optionsRow}>
           {["1x Daily", "2x Daily", "3x Daily", "Custom"].map((opt) => (
@@ -284,33 +346,6 @@ export default function EditMedicationModal({
     )
   }
 
-  const renderCourseForm = () => (
-    <View style={styles.subForm}>
-      <Text style={styles.sectionHeader}>Course Details</Text>
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Total Doses</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. 20"
-          keyboardType="numeric"
-          placeholderTextColor={Colors.textTertiary}
-          value={form.config.totalDoses}
-          onChangeText={(t) => updateConfig("totalDoses", t)}
-        />
-      </View>
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Start Date</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={Colors.textTertiary}
-          value={form.config.startDate}
-          onChangeText={(t) => updateConfig("startDate", t)}
-        />
-      </View>
-    </View>
-  )
-
   const renderCyclicForm = () => (
     <View style={styles.subForm}>
       <Text style={styles.sectionHeader}>Cycle Settings</Text>
@@ -401,7 +436,7 @@ export default function EditMedicationModal({
           </View>
 
           <View style={[styles.formGroup, { marginBottom: Spacing.xxl }]}>
-            <Text style={styles.label}>Dosage (Optional)</Text>
+            <Text style={styles.label}>Amount</Text>
             <View style={{ flexDirection: "row", gap: Spacing.sm, zIndex: 10 }}>
               {/* Quantity Input */}
               <View style={{ flex: 1 }}>
@@ -456,40 +491,25 @@ export default function EditMedicationModal({
             </ScrollView>
           </View>
 
-          {/* Type Selector */}
+          {/* Tracking Type Selector */}
           <View style={[styles.formGroup, { marginBottom: Spacing.md }]}>
-            <Text style={styles.label}>Medication Type</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: Spacing.sm }}
-            >
-              {MEDICATION_TYPES.map((type) => (
-                <TouchableOpacity
-                  key={type.id}
-                  style={[
-                    styles.typeChip,
-                    form.type === type.id && styles.typeChipActive,
-                  ]}
-                  onPress={() => setForm({ ...form, type: type.id })}
-                >
-                  <Text
-                    style={[
-                      styles.typeChipText,
-                      form.type === type.id && styles.typeChipTextActive,
-                    ]}
-                  >
-                    {type.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            <Text style={styles.label}>Frequency</Text>
+            <Dropdown
+              value={MEDICATION_TYPES.find((t) => t.id === form.type)?.label}
+              options={MEDICATION_TYPES.map((t) => t.label)}
+              onChange={(label) => {
+                const selected = MEDICATION_TYPES.find((t) => t.label === label)
+                if (selected) setForm({ ...form, type: selected.id })
+              }}
+              width="100%"
+            />
           </View>
 
           {/* Conditional Sub-Forms */}
-          {form.type === "daily" && renderDailyForm()}
+          {/* Daily Schedule is used for both Daily and Course types */}
+          {(form.type === "daily" || form.type === "course") &&
+            renderScheduleForm()}
 
-          {form.type === "course" && renderCourseForm()}
           {form.type === "cyclic" && renderCyclicForm()}
           {form.type === "interval" && renderIntervalForm()}
 
