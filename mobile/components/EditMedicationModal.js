@@ -190,17 +190,17 @@ export default function EditMedicationModal({
 
           {/* 3. Frequency & Schedule Group */}
           <View style={[styles.formGroup, { zIndex: 9 }]}>
-            {/* Frequency and Times - Side by Side Row */}
+            <Text style={styles.label}>Frequency</Text>
+
             <View
               style={{
                 flexDirection: "row",
+                gap: 12,
                 alignItems: "flex-start",
-                gap: Spacing.md,
               }}
             >
               {/* Left Column: Frequency Dropdown */}
               <View style={{ flex: 1.2 }}>
-                <Text style={styles.label}>Frequency</Text>
                 <Dropdown
                   value={
                     form.type === "cyclic"
@@ -260,11 +260,8 @@ export default function EditMedicationModal({
 
               {/* Right Column: Time Slots */}
               {(form.type === "daily" || form.type === "course") && (
-                <View style={{ flex: 1, marginTop: 24 }}>
-                  {/* marginTop 24 aligns with Label height (~20) + small margin to align with Input top */}
+                <View style={{ flex: 1 }}>
                   {form.times.map((time, index) => {
-                    let timeValue = ""
-                    let timePeriod = "AM"
                     const presets = [
                       "Morning",
                       "Noon",
@@ -272,79 +269,117 @@ export default function EditMedicationModal({
                       "Night",
                       "Before Meal",
                       "After Meal",
-                      "AM",
-                      "PM",
+                      "Time",
                     ]
-                    if (presets.includes(time)) {
-                      timePeriod = time
-                    } else {
-                      const parts = time.split(" ")
-                      if (
-                        parts.length > 1 &&
-                        ["AM", "PM"].includes(parts[parts.length - 1])
-                      ) {
-                        timePeriod = parts.pop()
-                        timeValue = parts.join(" ")
-                      } else {
-                        timeValue = time
+
+                    // Check if current value is a keyword preset
+                    const isKeyword = presets.includes(time) && time !== "Time"
+
+                    // If not a keyword, it's a specific time (or "Time" placeholder)
+                    const isTimeMode = !isKeyword
+
+                    // Helper to get Date object from string "H:MM AM"
+                    const getTimeDate = (str) => {
+                      const d = new Date()
+                      if (!str || presets.includes(str)) {
+                        d.setHours(8, 0, 0, 0) // Default 8 AM
+                        return d
                       }
+                      const [timePart, period] = str.split(" ")
+                      if (!timePart || !period) return d
+                      let [h, m] = timePart.split(":").map(Number)
+                      if (period === "PM" && h !== 12) h += 12
+                      if (period === "AM" && h === 12) h = 0
+                      d.setHours(h, m, 0, 0)
+                      return d
                     }
-
-                    const updateTime = (val, period) => {
-                      // AM/PM should NOT replace the value, they are suffixes
-                      const isStandalonePreset =
-                        presets.includes(period) &&
-                        !["AM", "PM"].includes(period)
-
-                      const newTimeStr = isStandalonePreset
-                        ? period
-                        : val
-                          ? `${val} ${period}`
-                          : period
-                      const newTimes = [...form.times]
-                      newTimes[index] = newTimeStr
-                      setForm({ ...form, times: newTimes })
-                    }
-                    const isPreset = presets.includes(timePeriod)
 
                     return (
                       <View
                         key={index}
                         style={[
                           styles.timeSlotRow,
-                          { zIndex: 50 - index, marginBottom: Spacing.sm },
+                          {
+                            zIndex: 50 - index,
+                            marginBottom: Spacing.sm,
+                            flexDirection: "row",
+                            gap: 12, // Match parent gap
+                            alignItems: "center",
+                          },
                         ]}
                       >
-                        {!isPreset && (
+                        {/* Split UI: Time Mode vs Preset Mode */}
+                        {isTimeMode ? (
+                          <>
+                            <View
+                              style={{
+                                flex: 1,
+                                alignItems: "center", // Centered horizontally
+                                justifyContent: "center", // Centered vertically
+                                height: 40, // Match Dropdown height
+                              }}
+                            >
+                              <DateTimePicker
+                                value={getTimeDate(time)}
+                                mode="time"
+                                display="compact"
+                                onChange={(e, date) => {
+                                  if (date) {
+                                    let h = date.getHours()
+                                    const m = String(
+                                      date.getMinutes()
+                                    ).padStart(2, "0")
+                                    const period = h >= 12 ? "PM" : "AM"
+                                    if (h > 12) h -= 12
+                                    if (h === 0) h = 12
+                                    const newTimeStr = `${h}:${m} ${period}`
+
+                                    const newTimes = [...form.times]
+                                    newTimes[index] = newTimeStr
+                                    setForm({ ...form, times: newTimes })
+                                  }
+                                }}
+                                themeVariant="dark"
+                                style={{ transform: [{ scale: 1.1 }] }}
+                              />
+                            </View>
+                            <View style={{ width: 44, alignItems: "flex-end" }}>
+                              <Dropdown
+                                value="Time"
+                                options={presets}
+                                iconOnly={true}
+                                menuWidth={120}
+                                onChange={(val) => {
+                                  const newTimes = [...form.times]
+                                  if (val === "Time") {
+                                    newTimes[index] = "8:00 AM"
+                                  } else {
+                                    newTimes[index] = val
+                                  }
+                                  setForm({ ...form, times: newTimes })
+                                }}
+                                width="100%"
+                              />
+                            </View>
+                          </>
+                        ) : (
                           <View style={{ flex: 1 }}>
-                            <TextInput
-                              style={[styles.input, { paddingHorizontal: 8 }]} // Compact padding
-                              value={timeValue}
-                              placeholder="00:00"
-                              placeholderTextColor={Colors.textTertiary}
-                              onChangeText={(text) =>
-                                updateTime(text, timePeriod)
-                              }
+                            <Dropdown
+                              value={time}
+                              options={presets}
+                              onChange={(val) => {
+                                const newTimes = [...form.times]
+                                if (val === "Time") {
+                                  newTimes[index] = "8:00 AM"
+                                } else {
+                                  newTimes[index] = val
+                                }
+                                setForm({ ...form, times: newTimes })
+                              }}
+                              width="100%"
                             />
                           </View>
                         )}
-                        <View
-                          style={{
-                            flex: isPreset ? 1 : 0,
-                            width: isPreset ? "auto" : 70,
-                          }}
-                        >
-                          <Dropdown
-                            value={timePeriod}
-                            options={presets}
-                            onChange={(period) => {
-                              let newVal = timeValue
-                              if (presets.includes(period)) newVal = ""
-                              updateTime(newVal, period)
-                            }}
-                            width="100%"
-                          />
-                        </View>
                         {form.times.length > 1 && (
                           <TouchableOpacity
                             onPress={() => {
