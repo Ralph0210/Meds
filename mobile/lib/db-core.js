@@ -1,41 +1,115 @@
-// Pure logic implementation, DB instance is injected
+// Current schema version - increment when adding migrations
+const CURRENT_SCHEMA_VERSION = 1
+
+/**
+ * Migration functions - each runs exactly once, in order
+ * Index 0 = version 1, Index 1 = version 2, etc.
+ *
+ * IMPORTANT: Never modify existing migrations, only add new ones.
+ * Each migration should be safe to run on existing data.
+ */
+const MIGRATIONS = [
+  // v1: Initial schema with type/config columns
+  // (Already created via CREATE TABLE, but we ensure columns exist for older DBs)
+  (db) => {
+    try {
+      db.execSync(
+        "ALTER TABLE medications ADD COLUMN type TEXT DEFAULT 'daily'"
+      )
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      db.execSync("ALTER TABLE medications ADD COLUMN config TEXT")
+    } catch (e) {
+      // Column already exists
+    }
+  },
+  // v2: Add future migrations here...
+  // (db) => {
+  //   db.execSync("ALTER TABLE medications ADD COLUMN notes TEXT");
+  // },
+]
+
+/**
+ * Get current schema version from database
+ */
+const getSchemaVersion = (db) => {
+  try {
+    const result = db.getFirstSync(
+      "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
+    )
+    return result ? result.version : 0
+  } catch (e) {
+    // Table doesn't exist yet
+    return 0
+  }
+}
+
+/**
+ * Set schema version in database
+ */
+const setSchemaVersion = (db, version) => {
+  db.runSync("INSERT OR REPLACE INTO schema_version (version) VALUES (?)", [
+    version,
+  ])
+}
+
+/**
+ * Initialize database with version-tracked migrations
+ * - Creates tables if they don't exist
+ * - Runs only new migrations (based on schema_version)
+ * - Safe to call on every app start
+ */
 export const initDatabaseCore = (db) => {
   return db.withTransactionSync(() => {
-    // Medications Table
+    // 1. Create schema_version table if not exists
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS schema_version (
+        version INTEGER PRIMARY KEY
+      );
+    `)
+
+    // 2. Create core tables if not exist
     db.execSync(`
       CREATE TABLE IF NOT EXISTS medications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         dosage TEXT,
         frequency TEXT,
-        times TEXT, -- JSON array of strings
+        times TEXT,
         color TEXT,
         icon TEXT,
-        keys TEXT, -- JSON array of strings (derived keys)
-        type TEXT DEFAULT 'daily', -- 'daily', 'prn', 'course', 'cyclic', 'interval', 'emergency'
-        config TEXT -- JSON object for type-specific data
+        keys TEXT,
+        type TEXT DEFAULT 'daily',
+        config TEXT
       );
     `)
 
-    // Records Table
     db.execSync(`
       CREATE TABLE IF NOT EXISTS records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT NOT NULL UNIQUE,
-        data TEXT, -- JSON object: { [medKey]: boolean }
+        data TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
     `)
 
-    // Migrations
-    try {
-      db.execSync(
-        "ALTER TABLE medications ADD COLUMN type TEXT DEFAULT 'daily'"
-      )
-    } catch (e) {}
-    try {
-      db.execSync("ALTER TABLE medications ADD COLUMN config TEXT")
-    } catch (e) {}
+    // 3. Run pending migrations
+    const currentVersion = getSchemaVersion(db)
+
+    for (let i = currentVersion; i < MIGRATIONS.length; i++) {
+      const migration = MIGRATIONS[i]
+      if (migration) {
+        try {
+          migration(db)
+        } catch (e) {
+          // Log but don't crash - data integrity is priority
+          console.warn(`Migration v${i + 1} failed:`, e.message)
+        }
+      }
+      setSchemaVersion(db, i + 1)
+    }
   })
 }
 
