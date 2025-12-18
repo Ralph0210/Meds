@@ -127,38 +127,6 @@ export default function SettingsScreen() {
           <Plus color={Colors.textOnPrimary} size={24} />
           <Text style={styles.addBtnText}>Add Medication</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.deleteBtn,
-            {
-              marginTop: Spacing.xxxl,
-              backgroundColor: Colors.dangerSurface,
-              alignSelf: "center",
-              width: "100%",
-            },
-          ]}
-          onPress={() => {
-            Alert.alert(
-              "Reset Everything?",
-              "This will delete all data and reset to defaults.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Reset",
-                  style: "destructive",
-                  onPress: () => {
-                    resetDatabase()
-                    queryClient.invalidateQueries()
-                  },
-                },
-              ]
-            )
-          }}
-        >
-          <Text style={[styles.deleteText, { color: Colors.danger }]}>
-            Reset All Data (Dev)
-          </Text>
-        </TouchableOpacity>
         <View style={{ height: 100 }} />
       </ScrollView>
 
