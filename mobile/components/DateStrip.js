@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, useState } from "react"
+import { useRef, useEffect, useMemo, useState, memo, useCallback } from "react"
 import {
   View,
   Text,
@@ -40,7 +40,92 @@ function isSameDay(d1, d2) {
   )
 }
 
-export default function DateStrip({ config = [] }) {
+const DateItem = memo(
+  ({ item, index, isSelected, isToday, config, history, onPress }) => {
+    // 1. Calculate Segments
+    const segments = []
+    if (config && config.length > 0) {
+      const dateStr = item.toLocaleDateString("en-CA")
+      // Items date at midnight
+      const itemTime = item.getTime()
+
+      const record = history?.[dateStr]?.data || {}
+
+      config.forEach((med) => {
+        // Check start date
+        const medConfig = med.config || {}
+        let showMed = true
+
+        if (medConfig.startDate) {
+          // Parse startDate "YYYY-MM-DD"
+          const [y, m, d] = medConfig.startDate.split("-").map(Number)
+          const startDate = new Date(y, m - 1, d)
+          if (itemTime < startDate.getTime()) {
+            showMed = false
+          }
+        }
+
+        if (showMed) {
+          med.keys.forEach((key) => {
+            segments.push({
+              completed: !!record[key],
+              color: med.color,
+            })
+          })
+        }
+      })
+    }
+
+    return (
+      <TouchableOpacity
+        onPress={() => onPress(item, index)}
+        style={styles.dateItemWrapper}
+      >
+        <View style={[styles.dateItem, isSelected && styles.dateItemSelected]}>
+          <View
+            style={[
+              styles.dayLabelContainer,
+              isToday && styles.todayLabelContainer,
+            ]}
+          >
+            <Text
+              style={[
+                styles.dayText,
+                isSelected && { color: Colors.primary },
+                isToday && {
+                  color: Colors.background,
+                  fontWeight: "bold",
+                },
+              ]}
+            >
+              {item.toLocaleDateString("en-US", { weekday: "narrow" })}
+            </Text>
+          </View>
+          <View style={styles.ringContainer}>
+            <ProgressRing segments={segments} size={36} />
+            <Text
+              style={[styles.dateText, isSelected && styles.dateTextSelected]}
+            >
+              {item.getDate()}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    )
+  },
+  (prev, next) => {
+    return (
+      prev.isSelected === next.isSelected &&
+      prev.isToday === next.isToday &&
+      prev.config === next.config &&
+      prev.history === next.history &&
+      // Item shouldn't change for same index generally, but safety check
+      prev.item.getTime() === next.item.getTime()
+    )
+  }
+)
+
+export default function DateStrip({ config = [], onFocusedDateChange }) {
   const { selectedDate, setSelectedDate } = useAppStore()
   const flatListRef = useRef(null)
 
@@ -71,19 +156,12 @@ export default function DateStrip({ config = [] }) {
   })
 
   // Calculate accurate center position
+  // Calculate accurate center position
   const screenWidth = Dimensions.get("window").width
-  const PADDING_LEFT = Spacing.lg // Must match styles.listContent.paddingLeft
+  const SNAP_PADDING = (screenWidth - FULL_ITEM_WIDTH) / 2
 
   const getCenterOffset = (index) => {
-    // Item Center relative to content start (0)
-    // Note: In RN FlatList, if contentContainer has padding, offset 0 is at the start of that padding?
-    // Actually, usually 0 is start of content.
-    // Let's assume standard behavior:
-    // Item X Start = PADDING_LEFT + Index * FULL_ITEM_WIDTH
-    const itemStart = PADDING_LEFT + index * FULL_ITEM_WIDTH
-    const itemCenter = itemStart + FULL_ITEM_WIDTH / 2
-    const centerOffset = itemCenter - screenWidth / 2
-    return Math.max(0, centerOffset)
+    return index * FULL_ITEM_WIDTH
   }
 
   const scrollToToday = () => {
@@ -118,69 +196,44 @@ export default function DateStrip({ config = [] }) {
       isSameDay(info.item, new Date())
     )
     setIsTodayVisible(!!todayItem)
+
+    // Notify info about centered date
+    if (onFocusedDateChange && viewableItems.length > 0) {
+      // DISABLED: User wants strict sync with selection ring, not visual center during scroll.
+      // The update is now handled in onMomentumScrollEnd and onPress.
+      /*
+      const midIndex = Math.floor(viewableItems.length / 2)
+      const centerItem = viewableItems[midIndex]?.item
+      if (centerItem) {
+        onFocusedDateChange(centerItem)
+      }
+      */
+    }
   }).current
 
-  const renderItem = ({ item }) => {
-    const isSelected = isSameDay(item, selectedDate)
-
-    // 1. Calculate Segments
-    const segments = []
-    if (config && config.length > 0) {
-      const dateStr = item.toLocaleDateString("en-CA")
-      // Items date at midnight
-      const itemTime = item.getTime()
-
-      const record = history?.[dateStr]?.data || {}
-
-      config.forEach((med) => {
-        // Check start date
-        // med.config (from db) or med.config (from prop?)
-        const medConfig = med.config || {}
-        let showMed = true
-
-        if (medConfig.startDate) {
-          // Parse startDate "YYYY-MM-DD"
-          // Create date at midnight local
-          const [y, m, d] = medConfig.startDate.split("-").map(Number)
-          const startDate = new Date(y, m - 1, d)
-          if (itemTime < startDate.getTime()) {
-            showMed = false
-          }
-        }
-
-        if (showMed) {
-          med.keys.forEach((key) => {
-            segments.push({
-              completed: !!record[key],
-              color: med.color,
-            })
-          })
-        }
+  const handleItemPress = useCallback(
+    (item, index) => {
+      setSelectedDate(item)
+      if (onFocusedDateChange) onFocusedDateChange(item) // Link focus immediately
+      flatListRef.current?.scrollToOffset({
+        offset: index * FULL_ITEM_WIDTH,
+        animated: true,
       })
-    }
+    },
+    [setSelectedDate, onFocusedDateChange]
+  )
 
+  const renderItem = ({ item, index }) => {
     return (
-      <TouchableOpacity
-        onPress={() => setSelectedDate(item)}
-        style={styles.dateItemWrapper}
-      >
-        <View style={[styles.dateItem, isSelected && styles.dateItemSelected]}>
-          <Text
-            style={[styles.dayText, isSelected && { color: Colors.primary }]}
-          >
-            {item.toLocaleDateString("en-US", { weekday: "narrow" })}
-          </Text>
-
-          <View style={styles.ringContainer}>
-            <ProgressRing segments={segments} size={36} />
-            <Text
-              style={[styles.dateText, isSelected && styles.dateTextSelected]}
-            >
-              {item.getDate()}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
+      <DateItem
+        item={item}
+        index={index}
+        isSelected={isSameDay(item, selectedDate)}
+        isToday={isSameDay(item, new Date())}
+        config={config}
+        history={history}
+        onPress={handleItemPress}
+      />
     )
   }
 
@@ -194,13 +247,26 @@ export default function DateStrip({ config = [] }) {
           keyExtractor={(item) => item.toISOString()}
           renderItem={renderItem}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={{ paddingHorizontal: SNAP_PADDING }}
           initialScrollIndex={todayIndex}
           getItemLayout={(data, index) => ({
             length: FULL_ITEM_WIDTH,
             offset: FULL_ITEM_WIDTH * index,
             index,
           })}
+          snapToInterval={FULL_ITEM_WIDTH}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          onMomentumScrollEnd={(ev) => {
+            const offsetX = ev.nativeEvent.contentOffset.x
+            const index = Math.round(offsetX / FULL_ITEM_WIDTH)
+            const clampedIndex = Math.max(0, Math.min(index, dates.length - 1))
+            const newDate = dates[clampedIndex]
+            if (!isSameDay(newDate, selectedDate)) {
+              setSelectedDate(newDate)
+              if (onFocusedDateChange) onFocusedDateChange(newDate) // Sync focus on snap
+            }
+          }}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
           onScrollToIndexFailed={(info) => {
@@ -245,7 +311,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: Spacing.lg,
+    // paddingHorizontal replaced by inline style SNAP_PADDING
   },
   dateItemWrapper: {
     marginHorizontal: ITEM_MARGIN,
@@ -310,5 +376,15 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 12,
     fontWeight: "600",
+  },
+  dayLabelContainer: {
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10, // Circle
+  },
+  todayLabelContainer: {
+    backgroundColor: "white",
   },
 })

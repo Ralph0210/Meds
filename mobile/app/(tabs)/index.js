@@ -5,6 +5,8 @@ import {
   RefreshControl,
   StyleSheet,
 } from "react-native"
+import { useState } from "react"
+// import { useNavigation } from "expo-router" // Unused
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { getMedications, getRecord, updateRecord } from "../../lib/db"
@@ -17,12 +19,15 @@ import { CheckCircle2, Leaf } from "lucide-react-native"
 export default function HomeScreen() {
   const { selectedDate } = useAppStore()
   const queryClient = useQueryClient()
+  const [focusedDate, setFocusedDate] = useState(selectedDate)
+
   const getGreeting = () => {
     const hour = new Date().getHours()
     if (hour < 12) return "Good Morning"
     if (hour < 18) return "Good Afternoon"
     return "Good Evening"
   }
+
   // Fix date string to be local YYYY-MM-DD
   const dateStr = selectedDate.toLocaleDateString("en-CA")
 
@@ -159,7 +164,7 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <Text style={styles.greeting}>{getGreeting()}</Text>
         <Text style={styles.headerSubtitle}>
-          {selectedDate.toLocaleDateString("en-US", {
+          {focusedDate.toLocaleDateString("en-US", {
             weekday: "long",
             month: "long",
             day: "numeric",
@@ -167,7 +172,7 @@ export default function HomeScreen() {
         </Text>
       </View>
 
-      <DateStrip config={configData} />
+      <DateStrip config={configData} onFocusedDateChange={setFocusedDate} />
 
       <ScrollView
         style={styles.scrollView}

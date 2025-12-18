@@ -8,7 +8,9 @@ import {
   Modal,
   StyleSheet,
   Alert,
+  Platform,
 } from "react-native"
+import DateTimePicker from "@react-native-community/datetimepicker"
 import { BlurView } from "expo-blur"
 import { X, Trash2, Check, ChevronRight } from "lucide-react-native"
 import { Colors, Spacing, Layout, Typography } from "../theme"
@@ -34,7 +36,29 @@ export default function EditMedicationModal({
   } = useMedicationForm(medication)
 
   const handleSave = () => {
-    if (!form.name) return
+    if (!form.name) {
+      Alert.alert("Missing Name", "Please enter a medication name.")
+      return
+    }
+
+    // Validation for Course Type
+    if (form.type === "course") {
+      if (!form.config.courseDuration) {
+        Alert.alert(
+          "Missing Duration",
+          "Please enter the duration value (e.g. number of days or pills)."
+        )
+        return
+      }
+      if (!form.config.startDate) {
+        Alert.alert(
+          "Missing Start Date",
+          "Please select a start date for the course."
+        )
+        return
+      }
+    }
+
     onSave({ ...medication, ...form, dosage: getFinalDosage() })
   }
 
@@ -196,16 +220,17 @@ export default function EditMedicationModal({
                     "Twice a day",
                     "3 times a day",
                     "Custom Schedule",
-                    "On and off (Cyclic)",
                   ]}
                   onChange={(label) => {
-                    if (label === "On and off (Cyclic)") {
-                      setForm({ ...form, type: "cyclic" })
+                    if (false) {
+                      // Cyclic removed
                     } else {
                       const newType =
-                        form.type === "cyclic" || form.type === "interval"
+                        form.type === "interval"
                           ? "daily"
-                          : form.type
+                          : form.type === "cyclic"
+                            ? "daily"
+                            : form.type // Fallback if somehow cyclic
 
                       let freq = "Custom"
                       let times = [...form.times]
@@ -247,6 +272,8 @@ export default function EditMedicationModal({
                       "Night",
                       "Before Meal",
                       "After Meal",
+                      "AM",
+                      "PM",
                     ]
                     if (presets.includes(time)) {
                       timePeriod = time
@@ -264,7 +291,12 @@ export default function EditMedicationModal({
                     }
 
                     const updateTime = (val, period) => {
-                      const newTimeStr = presets.includes(period)
+                      // AM/PM should NOT replace the value, they are suffixes
+                      const isStandalonePreset =
+                        presets.includes(period) &&
+                        !["AM", "PM"].includes(period)
+
+                      const newTimeStr = isStandalonePreset
                         ? period
                         : val
                           ? `${val} ${period}`
@@ -458,16 +490,49 @@ export default function EditMedicationModal({
                   </View>
                   <View style={{ marginTop: Spacing.md }}>
                     <Text style={styles.label}>Start Date</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={Colors.textTertiary}
-                      value={
-                        form.config.startDate ||
-                        new Date().toLocaleDateString("en-CA")
-                      }
-                      onChangeText={(t) => updateConfig("startDate", t)}
-                    />
+                    {Platform.OS === "ios" ? (
+                      <View style={{ alignItems: "flex-start" }}>
+                        <DateTimePicker
+                          value={(() => {
+                            if (form.config.startDate) {
+                              const [y, m, d] = form.config.startDate
+                                .split("-")
+                                .map(Number)
+                              return new Date(y, m - 1, d)
+                            }
+                            return new Date()
+                          })()}
+                          mode="date"
+                          display="compact" // inline, compact, spinner
+                          onChange={(e, selectedDate) => {
+                            if (selectedDate) {
+                              const y = selectedDate.getFullYear()
+                              const m = String(
+                                selectedDate.getMonth() + 1
+                              ).padStart(2, "0")
+                              const d = String(selectedDate.getDate()).padStart(
+                                2,
+                                "0"
+                              )
+                              updateConfig("startDate", `${y}-${m}-${d}`)
+                            }
+                          }}
+                          themeVariant="dark" // Assuming dark mode
+                          style={{ marginLeft: -10 }} // Align left? DatePicker compact styling is tricky.
+                        />
+                      </View>
+                    ) : (
+                      <TextInput
+                        style={styles.input}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={Colors.textTertiary}
+                        value={
+                          form.config.startDate ||
+                          new Date().toLocaleDateString("en-CA")
+                        }
+                        onChangeText={(t) => updateConfig("startDate", t)}
+                      />
+                    )}
                   </View>
                 </View>
               )}

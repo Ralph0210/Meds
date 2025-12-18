@@ -105,7 +105,10 @@ export default function MedicationCard({
             }}
           >
             <Text style={styles.cardTitle}>{config.name}</Text>
-            <Text style={styles.cardDesc}>{getDosageText()}</Text>
+            <Text style={styles.cardDesc}>
+              {getDosageText()}
+              {config.frequency ? `, ${config.frequency}` : ""}
+            </Text>
           </View>
           <View>
             {config.keys.map((k, i) => {
@@ -238,10 +241,10 @@ export default function MedicationCard({
       const dosesPerDay = config.keys?.length || 1
 
       // Calculate past doses accurately
+      // FIXED: Do not assume past doses were taken. Only count what is logged.
+      // Since we don't have full history here, we rely only on today's logs for immediate feedback,
+      // or we'd need to fetch aggregate stats. For now, removing the "phantom" logs.
       let pastDoses = 0
-      if (daysPassed > 0) {
-        pastDoses = daysPassed * dosesPerDay
-      }
 
       // Get today's completion count
       const takenToday =

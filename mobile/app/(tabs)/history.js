@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  ScrollView,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useQuery } from "@tanstack/react-query"
@@ -14,7 +15,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react-native"
 import { getRecords, getMedications } from "../../lib/db"
 import { useAppStore } from "../../store/useAppStore"
 import CalendarGrid from "../../components/CalendarGrid"
-import { Colors, Spacing, Typography } from "../../theme"
+import { Colors, Spacing, Typography, Layout } from "../../theme"
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"]
 
@@ -144,35 +145,68 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.navBtn}>
-          <ChevronLeft color="#fff" size={24} />
-        </TouchableOpacity>
-        <Text style={styles.monthTitle}>
-          {currentMonth.toLocaleDateString("en-US", {
-            month: "long",
-            year: "numeric",
-          })}
-        </Text>
-        <TouchableOpacity onPress={() => changeMonth(1)} style={styles.navBtn}>
-          <ChevronRight color="#fff" size={24} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.weekRow}>
-        {WEEKDAYS.map((d, i) => (
-          <Text key={i} style={styles.weekdayText}>
-            {d}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => changeMonth(-1)}
+            style={styles.navBtn}
+          >
+            <ChevronLeft color="#fff" size={24} />
+          </TouchableOpacity>
+          <Text style={styles.monthTitle}>
+            {currentMonth.toLocaleDateString("en-US", {
+              month: "long",
+              year: "numeric",
+            })}
           </Text>
-        ))}
-      </View>
+          <TouchableOpacity
+            onPress={() => changeMonth(1)}
+            style={styles.navBtn}
+          >
+            <ChevronRight color="#fff" size={24} />
+          </TouchableOpacity>
+        </View>
 
-      <CalendarGrid
-        startOfMonth={startOfMonth}
-        endOfMonth={endOfMonth}
-        getDaySegments={getDaySegments}
-        onDayPress={handleDayPress}
-      />
+        <View style={styles.weekRow}>
+          {WEEKDAYS.map((d, i) => (
+            <Text key={i} style={styles.weekdayText}>
+              {d}
+            </Text>
+          ))}
+        </View>
+
+        <CalendarGrid
+          startOfMonth={startOfMonth}
+          endOfMonth={endOfMonth}
+          getDaySegments={getDaySegments}
+          onDayPress={handleDayPress}
+        />
+
+        {/* Legend */}
+        <View style={styles.legendContainer}>
+          <Text style={styles.legendTitle}>Medications</Text>
+          <View style={styles.legendGrid}>
+            {config?.map((med, index) => (
+              <View key={med.id || index} style={styles.legendItem}>
+                <View
+                  style={[
+                    styles.legendDot,
+                    { backgroundColor: med.color || Colors.primary },
+                  ]}
+                />
+                <Text style={styles.legendText} numberOfLines={1}>
+                  {med.name || "Medication"}
+                </Text>
+              </View>
+            ))}
+            {(!config || config.length === 0) && (
+              <Text style={{ color: Colors.textSecondary }}>
+                No active medications.
+              </Text>
+            )}
+          </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   )
 }
@@ -184,6 +218,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  scrollContent: {
+    paddingBottom: Spacing.xl,
   },
   header: {
     flexDirection: "row",
@@ -219,5 +256,44 @@ const styles = StyleSheet.create({
   todayText: {
     color: Colors.textPrimary,
     fontWeight: "bold",
+  },
+  legendContainer: {
+    padding: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.surfaceHighlight,
+    marginTop: Spacing.lg,
+  },
+  legendTitle: {
+    color: Colors.textSecondary,
+    fontSize: Typography.body.fontSize, // Bigger title
+    marginBottom: Spacing.md,
+    fontWeight: "600",
+  },
+  legendGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.md,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Layout.radius.full,
+    borderWidth: 1,
+    borderColor: Colors.surfaceHighlight,
+    maxWidth: "48%", // Allow 2 per row roughly
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  legendText: {
+    color: Colors.textPrimary,
+    fontSize: Typography.caption.fontSize, // Bigger text (was small)
+    fontWeight: "500",
   },
 })
