@@ -71,6 +71,26 @@ mobile/
 - **Batch Operations**: Record cleanup on deletion is batched
 - **Lazy Loading**: Components load data on-demand
 
+## 🔄 Database Migrations
+
+Version-tracked migrations ensure safe updates:
+
+```javascript
+// In db-core.js - add new migrations to MIGRATIONS array
+const MIGRATIONS = [
+  // v1: Initial schema
+  (db) => { ... },
+  // v2: Add notes column (example)
+  (db) => {
+    db.execSync("ALTER TABLE medications ADD COLUMN notes TEXT");
+  },
+];
+```
+
+- Migrations run exactly once, in order
+- Schema version tracked in `schema_version` table
+- Safe for existing users - data never lost
+
 ## 🗄️ Database Schema
 
 ### medications
@@ -126,14 +146,6 @@ npx expo start --ios
 npm test
 ```
 
-## 📱 Storybook
-
-Component development with Storybook:
-
-```bash
-npm run storybook
-```
-
 ## License
 
-Private - All rights reserved.
+MIT License - see [LICENSE](../LICENSE) for details.
