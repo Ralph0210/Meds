@@ -22,6 +22,10 @@ export default function TabLayout() {
         name="index"
         options={{
           tabBarIcon: ({ color }) => <Home size={24} color={color} />,
+          headerShown: true,
+          headerTitle: "",
+          headerTransparent: true,
+          headerStyle: { backgroundColor: "transparent" },
         }}
       />
       <Tabs.Screen

@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  ScrollView,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useQuery } from "@tanstack/react-query"
@@ -14,7 +15,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react-native"
 import { getRecords, getMedications } from "../../lib/db"
 import { useAppStore } from "../../store/useAppStore"
 import CalendarGrid from "../../components/CalendarGrid"
-import { Colors, Spacing, Typography } from "../../theme"
+import { Colors, Spacing, Typography, Layout } from "../../theme"
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"]
 
@@ -58,7 +59,69 @@ export default function HistoryScreen() {
     const rec = records?.[dateStr]?.data || {}
 
     const segments = []
+
+    // Day-specific timestamps for check
+    const dayTime = new Date(day)
+    dayTime.setHours(0, 0, 0, 0)
+
     config.forEach((med) => {
+      // 1. FILTERING LOGIC (Must match HomeScreen)
+      const medConfig = med.config || {}
+
+      // Check Start Date
+      if (medConfig.startDate) {
+        const [y, m, d] = medConfig.startDate.split("-").map(Number)
+        const start = new Date(y, m - 1, d)
+        start.setHours(0, 0, 0, 0)
+        if (dayTime.getTime() < start.getTime()) return
+      }
+
+      // Check Interval
+      if (med.type === "interval") {
+        const interval = parseInt(medConfig.intervalDays) || 1
+        if (interval > 1 && medConfig.startDate) {
+          const [y, m, d] = medConfig.startDate.split("-").map(Number)
+          const start = new Date(y, m - 1, d)
+          start.setHours(0, 0, 0, 0)
+          const diffTime = dayTime - start
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          if (diffDays < 0 || diffDays % interval !== 0) return
+        }
+      }
+
+      // Check Cyclic
+      if (med.type === "cyclic") {
+        const cycle = parseInt(medConfig.cycleDays) || 28
+        const active = parseInt(medConfig.activeDays) || 21
+        if (medConfig.startDate) {
+          const [y, m, d] = medConfig.startDate.split("-").map(Number)
+          const start = new Date(y, m - 1, d)
+          start.setHours(0, 0, 0, 0)
+          const diffTime = dayTime - start
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+          if (diffDays < 0) return
+
+          const position = diffDays % cycle
+          if (position >= active) return
+        }
+      }
+
+      // Check Course Duration
+      if (med.type === "course") {
+        if (medConfig.durationMode === "days") {
+          const duration = parseInt(medConfig.courseDuration) || 1
+          if (medConfig.startDate) {
+            const [y, m, d] = medConfig.startDate.split("-").map(Number)
+            const start = new Date(y, m - 1, d)
+            start.setHours(0, 0, 0, 0)
+            const diffTime = dayTime - start
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+            if (diffDays < 0 || diffDays >= duration) return
+          }
+        }
+      }
+
+      // 2. Add Segments
       med.keys.forEach((key) => {
         segments.push({
           color: med.color || Colors.primary,
@@ -82,35 +145,68 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.navBtn}>
-          <ChevronLeft color="#fff" size={24} />
-        </TouchableOpacity>
-        <Text style={styles.monthTitle}>
-          {currentMonth.toLocaleDateString("en-US", {
-            month: "long",
-            year: "numeric",
-          })}
-        </Text>
-        <TouchableOpacity onPress={() => changeMonth(1)} style={styles.navBtn}>
-          <ChevronRight color="#fff" size={24} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.weekRow}>
-        {WEEKDAYS.map((d, i) => (
-          <Text key={i} style={styles.weekdayText}>
-            {d}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => changeMonth(-1)}
+            style={styles.navBtn}
+          >
+            <ChevronLeft color="#fff" size={24} />
+          </TouchableOpacity>
+          <Text style={styles.monthTitle}>
+            {currentMonth.toLocaleDateString("en-US", {
+              month: "long",
+              year: "numeric",
+            })}
           </Text>
-        ))}
-      </View>
+          <TouchableOpacity
+            onPress={() => changeMonth(1)}
+            style={styles.navBtn}
+          >
+            <ChevronRight color="#fff" size={24} />
+          </TouchableOpacity>
+        </View>
 
-      <CalendarGrid
-        startOfMonth={startOfMonth}
-        endOfMonth={endOfMonth}
-        getDaySegments={getDaySegments}
-        onDayPress={handleDayPress}
-      />
+        <View style={styles.weekRow}>
+          {WEEKDAYS.map((d, i) => (
+            <Text key={i} style={styles.weekdayText}>
+              {d}
+            </Text>
+          ))}
+        </View>
+
+        <CalendarGrid
+          startOfMonth={startOfMonth}
+          endOfMonth={endOfMonth}
+          getDaySegments={getDaySegments}
+          onDayPress={handleDayPress}
+        />
+
+        {/* Legend */}
+        <View style={styles.legendContainer}>
+          <Text style={styles.legendTitle}>Medications</Text>
+          <View style={styles.legendGrid}>
+            {config?.map((med, index) => (
+              <View key={med.id || index} style={styles.legendItem}>
+                <View
+                  style={[
+                    styles.legendDot,
+                    { backgroundColor: med.color || Colors.primary },
+                  ]}
+                />
+                <Text style={styles.legendText} numberOfLines={1}>
+                  {med.name || "Medication"}
+                </Text>
+              </View>
+            ))}
+            {(!config || config.length === 0) && (
+              <Text style={{ color: Colors.textSecondary }}>
+                No active medications.
+              </Text>
+            )}
+          </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   )
 }
@@ -122,6 +218,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  scrollContent: {
+    paddingBottom: Spacing.xl,
   },
   header: {
     flexDirection: "row",
@@ -157,5 +256,44 @@ const styles = StyleSheet.create({
   todayText: {
     color: Colors.textPrimary,
     fontWeight: "bold",
+  },
+  legendContainer: {
+    padding: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.surfaceHighlight,
+    marginTop: Spacing.lg,
+  },
+  legendTitle: {
+    color: Colors.textSecondary,
+    fontSize: Typography.body.fontSize, // Bigger title
+    marginBottom: Spacing.md,
+    fontWeight: "600",
+  },
+  legendGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.md,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Layout.radius.full,
+    borderWidth: 1,
+    borderColor: Colors.surfaceHighlight,
+    maxWidth: "48%", // Allow 2 per row roughly
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  legendText: {
+    color: Colors.textPrimary,
+    fontSize: Typography.caption.fontSize, // Bigger text (was small)
+    fontWeight: "500",
   },
 })
