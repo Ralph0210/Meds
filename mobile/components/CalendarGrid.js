@@ -10,7 +10,8 @@ import ProgressRing from "./ProgressRing" // Sibling import
 import { Colors, Spacing, Typography, Layout } from "../theme"
 
 const { width } = Dimensions.get("window")
-const CELL_SIZE = (width - 32) / 7
+// Use floor to ensure cells fit without overflow
+const CELL_SIZE = Math.floor((width - 32) / 7)
 
 // Helper
 function isToday(date) {
@@ -77,7 +78,7 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: 16,
   },
   cellWrapper: {
     width: CELL_SIZE,
