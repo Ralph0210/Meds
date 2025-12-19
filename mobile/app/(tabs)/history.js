@@ -212,7 +212,7 @@ export default function HistoryScreen() {
 }
 
 const { width } = Dimensions.get("window")
-const CELL_SIZE = (width - 32) / 7
+const CELL_SIZE = Math.floor((width - 32) / 7)
 
 const styles = StyleSheet.create({
   container: {
