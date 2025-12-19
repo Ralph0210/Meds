@@ -33,12 +33,12 @@ export default function ProgressRing({
     }
 
     const total = segments.length
-    const gap = total > 1 ? 0.1 : 0
 
     // Arc length for one segment
     const arcLength = circum / total
-    // Visual gap size (pixels)
-    const gapSize = total > 1 ? (size < 40 ? 2 : 4) : 0
+    // Only show gaps when 3+ segments, and keep them minimal
+    // For 1-2 segments, no gaps needed
+    const gapSize = total > 2 ? (size < 40 ? 1 : 2) : 0
     const dashLength = Math.max(0, arcLength - gapSize)
 
     return (
