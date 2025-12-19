@@ -1,4 +1,4 @@
-# Meds - Technical Documentation
+# Meds. - Technical Documentation
 
 > Detailed architecture and development guide for the Meds iOS app.
 
